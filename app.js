@@ -1155,7 +1155,7 @@ function optimizeTeams() {
   const totalCount = activePlayers.length + specCount;
 
   if (activePlayers.length < 2 && totalCount < 2) {
-    showCustomAlert('人数不足', 'チーム分けを行うには、最低2人以上のプレイヤーが必要です。');
+    showCustomAlert('人数不足', 'チーム分けを行うには、2人以上のプレイヤーが必要です。');
     return;
   }
 
@@ -1201,7 +1201,7 @@ function fillRandomFromSpectators(neededCount) {
 function runTeamOptimization(activePlayers) {
   const totalCount = activePlayers.length;
   if (totalCount < 2) {
-    showCustomAlert('人数不足', 'チーム分けを行うには、最低2人以上のプレイヤーが必要です。');
+    showCustomAlert('人数不足', 'チーム分けを行うには、2人以上のプレイヤーが必要です。');
     return;
   }
 
