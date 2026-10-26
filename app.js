@@ -1,5 +1,15 @@
+/* ==========================================================================
+   1. 定数・マスタデータ定義
+   ========================================================================== */
 const VAL_RANK_BASE = 'https://media.valorant-api.com/competitivetiers/03621f52-342b-cf4e-4f86-9350a49c6d04/';
 
+const STORAGE_KEY_LOBBY = 'val_lobby_state_v9';
+const TEAM_SLOT_COUNT = 5;
+const MAX_CANDIDATES = 16;
+const MAX_VISIBLE_TABS = 8;
+const CIRCLE_NUMS = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧'];
+
+// ランク定義と基準レート
 const RANKS = {
   radiant: { name: 'レディアント', short: 'Radiant', value: 3000, icon: `${VAL_RANK_BASE}27/smallicon.png` },
   imo3: { name: 'イモータル 3', short: 'imo3', value: 2700, icon: `${VAL_RANK_BASE}26/smallicon.png` },
@@ -29,6 +39,20 @@ const RANKS = {
   unranked: { name: 'アンランク', short: 'UNRANK', value: 1000, icon: `${VAL_RANK_BASE}0/smallicon.png` }
 };
 
+// ランク選択ポップオーバーでの表示順
+const RANK_PICKER_ORDER = [
+  'radiant', 'unranked',
+  'imo3', 'imo2', 'imo1',
+  'a3', 'a2', 'a1',
+  'd3', 'd2', 'd1',
+  'p3', 'p2', 'p1',
+  'g3', 'g2', 'g1',
+  's3', 's2', 's1',
+  'b3', 'b2', 'b1',
+  'i3', 'i2', 'i1'
+];
+
+// ロール定義
 const ROLES = {
   none: { name: '指定なし', short: '', icon: '' },
   duelist: {
@@ -53,6 +77,7 @@ const ROLES = {
   }
 };
 
+// サンプル（テスト用）ロビーデータ
 const SAMPLE_LOBBY = {
   attackers: [
     { id: 'p1', name: 'Phoenix', rank: 'a2', role: 'duelist', adjustment: 0, mvpBonus: 50, locked: false },
@@ -74,102 +99,114 @@ const SAMPLE_LOBBY = {
   ]
 };
 
+// 一括登録用ランク解析パターン
+const BULK_RANK_PATTERNS = [
+  { key: 'radiant', patterns: [/radiant/i, /レディアント/, /レディ/, /れでぃ/] },
+  { key: 'imo3', patterns: [/imo[\s_-]*3/i, /im(?:mortal)?[\s_-]*3/i, /イモータル[\s_]*3/, /いもーたる[\s_]*3/, /イモ[\s_]*3/, /いも[\s_]*3/] },
+  { key: 'imo2', patterns: [/imo[\s_-]*2/i, /im(?:mortal)?[\s_-]*2/i, /イモータル[\s_]*2/, /いもーたる[\s_]*2/, /イモ[\s_]*2/, /いも[\s_]*2/] },
+  { key: 'imo1', patterns: [/imo[\s_-]*1/i, /im(?:mortal)?[\s_-]*1/i, /イモータル[\s_]*1/, /いもーたる[\s_]*1/, /イモ[\s_]*1/, /いも[\s_]*1/] },
+  { key: 'a3', patterns: [/a(?:sc(?:endant)?)?[\s_-]*3/i, /アセンダント[\s_]*3/, /あせんだんと[\s_]*3/, /アセ[\s_]*3/, /あせ[\s_]*3/] },
+  { key: 'a2', patterns: [/a(?:sc(?:endant)?)?[\s_-]*2/i, /アセンダント[\s_]*2/, /あせんだんと[\s_]*2/, /アセ[\s_]*2/, /あせ[\s_]*2/] },
+  { key: 'a1', patterns: [/a(?:sc(?:endant)?)?[\s_-]*1/i, /アセンダント[\s_]*1/, /あせんだんと[\s_]*1/, /アセ[\s_]*1/, /あせ[\s_]*1/] },
+  { key: 'd3', patterns: [/d(?:ia|iamond)?[\s_-]*3/i, /ダイヤモンド[\s_]*3/, /だいやもんど[\s_]*3/, /ダイヤ[\s_]*3/, /だいや[\s_]*3/] },
+  { key: 'd2', patterns: [/d(?:ia|iamond)?[\s_-]*2/i, /ダイヤモンド[\s_]*2/, /だいやもんど[\s_]*2/, /ダイヤ[\s_]*2/, /だいや[\s_]*2/] },
+  { key: 'd1', patterns: [/d(?:ia|iamond)?[\s_-]*1/i, /ダイヤモンド[\s_]*1/, /だいやもんど[\s_]*1/, /ダイヤ[\s_]*1/, /だいや[\s_]*1/] },
+  { key: 'p3', patterns: [/p(?:lat|latinum)?[\s_-]*3/i, /プラチナ[\s_]*3/, /ぷらちな[\s_]*3/, /プラ[\s_]*3/, /ぷら[\s_]*3/] },
+  { key: 'p2', patterns: [/p(?:lat|latinum)?[\s_-]*2/i, /プラチナ[\s_]*2/, /ぷらちな[\s_]*2/, /プラ[\s_]*2/, /ぷら[\s_]*2/] },
+  { key: 'p1', patterns: [/p(?:lat|latinum)?[\s_-]*1/i, /プラチナ[\s_]*1/, /ぷらちな[\s_]*1/, /プラ[\s_]*1/, /ぷら[\s_]*1/] },
+  { key: 'g3', patterns: [/g(?:old)?[\s_-]*3/i, /ゴールド[\s_]*3/, /ごーるど[\s_]*3/, /ゴル[\s_]*3/, /ごる[\s_]*3/] },
+  { key: 'g2', patterns: [/g(?:old)?[\s_-]*2/i, /ゴールド[\s_]*2/, /ごーるど[\s_]*2/, /ゴル[\s_]*2/, /ごる[\s_]*2/] },
+  { key: 'g1', patterns: [/g(?:old)?[\s_-]*1/i, /ゴールド[\s_]*1/, /ごーるど[\s_]*1/, /ゴル[\s_]*1/, /ごる[\s_]*1/] },
+  { key: 's3', patterns: [/s(?:il|ver)?[\s_-]*3/i, /シルバー[\s_]*3/, /しるばー[\s_]*3/, /シル[\s_]*3/, /しる[\s_]*3/] },
+  { key: 's2', patterns: [/s(?:il|ver)?[\s_-]*2/i, /シルバー[\s_]*2/, /しるばー[\s_]*2/, /シル[\s_]*2/, /しる[\s_]*2/] },
+  { key: 's1', patterns: [/s(?:il|ver)?[\s_-]*1/i, /シルバー[\s_]*1/, /しるばー[\s_]*1/, /シル[\s_]*1/, /しる[\s_]*1/] },
+  { key: 'b3', patterns: [/b(?:ro|ronze)?[\s_-]*3/i, /ブロンズ[\s_]*3/, /ぶろんず[\s_]*3/, /ブロ[\s_]*3/, /ぶろ[\s_]*3/] },
+  { key: 'b2', patterns: [/b(?:ro|ronze)?[\s_-]*2/i, /ブロンズ[\s_]*2/, /ぶろんず[\s_]*2/, /ブロ[\s_]*2/, /ぶろ[\s_]*2/] },
+  { key: 'b1', patterns: [/b(?:ro|ronze)?[\s_-]*1/i, /ブロンズ[\s_]*1/, /ぶろんず[\s_]*1/, /ブロ[\s_]*1/, /ぶろ[\s_]*1/] },
+  { key: 'i3', patterns: [/i(?:ron)?[\s_-]*3/i, /アイアン[\s_]*3/, /あいあん[\s_]*3/] },
+  { key: 'i2', patterns: [/i(?:ron)?[\s_-]*2/i, /アイアン[\s_]*2/, /あいあん[\s_]*2/] },
+  { key: 'i1', patterns: [/i(?:ron)?[\s_-]*1/i, /アイアン[\s_]*1/, /あいあん[\s_]*1/] },
+  { key: 'unranked', patterns: [/unranked/i, /unr/i, /アンランク/, /あんらんく/] }
+];
+
+// 一括登録用ロール解析パターン
+const BULK_ROLE_PATTERNS = [
+  { key: 'duelist', patterns: [/duelist/i, /デュエリスト/, /デュエ/, /due/, /でゅえ/] },
+  { key: 'initiator', patterns: [/initiator/i, /イニシエーター/, /イニシ/, /ini/, /いにし/] },
+  { key: 'controller', patterns: [/controller/i, /スモーク/, /コントローラー/, /モク/, /もく/, /con/] },
+  { key: 'sentinel', patterns: [/sentinel/i, /センチネル/, /センチ/, /sen/, /せんち/] }
+];
+
+/* ==========================================================================
+   2. アプリケーション状態
+   ========================================================================== */
 let lobby = {
-  attackers: [null, null, null, null, null],
-  defenders: [null, null, null, null, null],
+  attackers: Array(TEAM_SLOT_COUNT).fill(null),
+  defenders: Array(TEAM_SLOT_COUNT).fill(null),
   spectators: []
 };
 
+// チーム分け候補の状態
 let generatedCandidates = [];
 let currentCandidateIndex = 0;
 let displayedPatternCount = 4;
+
+// ドラッグ＆ドロップの状態
 let draggedItemInfo = null;
 
+// インライン追加フォームの状態
 let inlineAddingSlot = null;
 let inlineAddingSpectator = false;
 let inlineSpectatorRank = 'unranked';
 
+// 実力補正モーダルの状態
 let currentAdjustingPlayer = null;
 let tempMvpBonus = 0;
 
+// ポップオーバー・トーストの状態
 let activePicker = null;
-let pickerContext = null;
+let toastTimer = null;
 
-const STORAGE_KEY_LOBBY = 'val_lobby_state_v9';
-
+/* ==========================================================================
+   3. 初期化・イベントリスナー設定
+   ========================================================================== */
 document.addEventListener('DOMContentLoaded', () => {
   loadLobbyData();
   setupEventListeners();
   renderLobby();
 });
 
-function loadLobbyData() {
-  const saved = localStorage.getItem(STORAGE_KEY_LOBBY);
-  if (saved) {
-    try {
-      lobby = JSON.parse(saved);
-      while (lobby.attackers.length < 5) lobby.attackers.push(null);
-      while (lobby.defenders.length < 5) lobby.defenders.push(null);
-      if (!Array.isArray(lobby.spectators)) lobby.spectators = [];
-      [...lobby.attackers, ...lobby.defenders, ...lobby.spectators].forEach(p => {
-        if (p && !RANKS[p.rank]) p.rank = 'unranked';
-      });
-    } catch (e) {
-      lobby = JSON.parse(JSON.stringify(SAMPLE_LOBBY));
-    }
-  } else {
-    lobby = JSON.parse(JSON.stringify(SAMPLE_LOBBY));
-    saveLobbyData();
-  }
-}
-
-function saveLobbyData() {
-  localStorage.setItem(STORAGE_KEY_LOBBY, JSON.stringify(lobby));
-}
-
-function getEffectiveRate(player) {
-  if (!player) return 0;
-  const base = RANKS[player.rank] ? RANKS[player.rank].value : 1000;
-  const adj = Number(player.adjustment) || 0;
-  const mvp = Number(player.mvpBonus) || 0;
-  return base + adj + mvp;
-}
-
-function getRankFromRate(rate) {
-  const rankEntries = Object.entries(RANKS).filter(([k]) => k !== 'unranked');
-  let closest = RANKS.p1;
-  let minDiff = 999999;
-
-  for (const [key, info] of rankEntries) {
-    const diff = Math.abs(rate - info.value);
-    if (diff < minDiff) {
-      minDiff = diff;
-      closest = info;
-    }
-  }
-  return closest;
-}
-
 function setupEventListeners() {
+  // メインアクションボタン
   document.getElementById('btnOptimizeTeams').addEventListener('click', optimizeTeams);
   document.getElementById('btnSwapTeams').addEventListener('click', swapSides);
   document.getElementById('btnCopyDiscord').addEventListener('click', copyDiscordText);
 
-  const compareModal = document.getElementById('compareModal');
+  // 選考基準の切り替え時に自動で候補を更新
+  document.getElementById('priorityMode').addEventListener('change', () => {
+    const activePlayers = getActivePlayers();
+    if (activePlayers.length >= 2) {
+      runTeamOptimization(activePlayers);
+    }
+  });
+
+  // 候補1〜4からランダム選出・全パターン比較モーダル
+  document.getElementById('btnRandomTop4').addEventListener('click', pickRandomTopCandidate);
   document.getElementById('btnOpenCompareModal').addEventListener('click', () => {
     renderCompareModal();
-    compareModal.classList.remove('hidden');
+    openModal('compareModal');
   });
-  document.getElementById('btnCloseCompareModal').addEventListener('click', () => compareModal.classList.add('hidden'));
-  document.getElementById('btnCloseCompareBtn').addEventListener('click', () => compareModal.classList.add('hidden'));
+  document.getElementById('btnCloseCompareModal').addEventListener('click', () => closeModal('compareModal'));
+  document.getElementById('btnCloseCompareBtn').addEventListener('click', () => closeModal('compareModal'));
 
+  // テスト用データ読み込み
   document.getElementById('btnQuickSample').addEventListener('click', () => {
     showCustomConfirm(
       'テスト用データを読み込む',
       'テスト用データで上書きしますか？',
       '上書きする',
       () => {
-        lobby = JSON.parse(JSON.stringify(SAMPLE_LOBBY));
+        lobby = cloneData(SAMPLE_LOBBY);
         inlineAddingSlot = null;
         inlineAddingSpectator = false;
         saveLobbyData();
@@ -180,6 +217,7 @@ function setupEventListeners() {
     );
   });
 
+  // 全プレイヤー消去
   document.getElementById('btnClearLobby').addEventListener('click', () => {
     showCustomConfirm(
       '消去',
@@ -187,8 +225,8 @@ function setupEventListeners() {
       '消去する',
       () => {
         lobby = {
-          attackers: [null, null, null, null, null],
-          defenders: [null, null, null, null, null],
+          attackers: Array(TEAM_SLOT_COUNT).fill(null),
+          defenders: Array(TEAM_SLOT_COUNT).fill(null),
           spectators: []
         };
         inlineAddingSlot = null;
@@ -202,6 +240,7 @@ function setupEventListeners() {
     );
   });
 
+  // 観戦者追加ボタン
   document.getElementById('btnAddSpectatorBtn').addEventListener('click', () => {
     inlineAddingSlot = null;
     inlineAddingSpectator = true;
@@ -209,6 +248,7 @@ function setupEventListeners() {
     renderSpectators();
   });
 
+  // 観戦者エリアへのドラッグ＆ドロップ
   const spectatorDropZone = document.getElementById('slotsSpectators');
   spectatorDropZone.addEventListener('dragover', (e) => {
     e.preventDefault();
@@ -227,9 +267,9 @@ function setupEventListeners() {
     handleDropOnSpectators(item);
   });
 
-  const adjustModal = document.getElementById('adjustModal');
-  document.getElementById('btnCloseAdjustModal').addEventListener('click', () => adjustModal.classList.add('hidden'));
-  document.getElementById('btnCancelAdjust').addEventListener('click', () => adjustModal.classList.add('hidden'));
+  // 実力補正モーダル
+  document.getElementById('btnCloseAdjustModal').addEventListener('click', () => closeModal('adjustModal'));
+  document.getElementById('btnCancelAdjust').addEventListener('click', () => closeModal('adjustModal'));
   document.getElementById('btnSaveAdjust').addEventListener('click', saveAdjustModal);
 
   document.querySelectorAll('.mvp-select-btn').forEach(btn => {
@@ -240,74 +280,207 @@ function setupEventListeners() {
     });
   });
 
-  const bulkModal = document.getElementById('bulkModal');
+  // 一括登録モーダル
   document.getElementById('btnOpenBulkAdd').addEventListener('click', () => {
     document.getElementById('bulkTextarea').value = '';
-    bulkModal.classList.remove('hidden');
+    openModal('bulkModal');
   });
-  document.getElementById('btnCloseBulkModal').addEventListener('click', () => bulkModal.classList.add('hidden'));
-  document.getElementById('btnCancelBulk').addEventListener('click', () => bulkModal.classList.add('hidden'));
+  document.getElementById('btnCloseBulkModal').addEventListener('click', () => closeModal('bulkModal'));
+  document.getElementById('btnCancelBulk').addEventListener('click', () => closeModal('bulkModal'));
   document.getElementById('btnApplyBulk').addEventListener('click', handleApplyBulk);
 
+  // データ保存（エクスポート）モーダル
   document.getElementById('btnExportData').addEventListener('click', exportData);
-  const exportModal = document.getElementById('exportModal');
-  document.getElementById('btnCloseExportModal').addEventListener('click', () => exportModal.classList.add('hidden'));
-  document.getElementById('btnCloseExportBtn').addEventListener('click', () => exportModal.classList.add('hidden'));
+  document.getElementById('btnCloseExportModal').addEventListener('click', () => closeModal('exportModal'));
+  document.getElementById('btnCloseExportBtn').addEventListener('click', () => closeModal('exportModal'));
   document.getElementById('btnCopyExportText').addEventListener('click', () => {
     const text = document.getElementById('exportTextarea').value;
     navigator.clipboard.writeText(text).then(() => {
-      exportModal.classList.add('hidden');
+      closeModal('exportModal');
       showToast('テキストをクリップボードにコピーしました！');
     });
   });
 
-  const choiceModal = document.getElementById('teamCountChoiceModal');
-  document.getElementById('btnCloseChoiceModal').addEventListener('click', () => choiceModal.classList.add('hidden'));
-  document.getElementById('btnCancelChoiceModal').addEventListener('click', () => choiceModal.classList.add('hidden'));
+  // チーム分け人数選択モーダル
+  document.getElementById('btnCloseChoiceModal').addEventListener('click', () => closeModal('teamCountChoiceModal'));
+  document.getElementById('btnCancelChoiceModal').addEventListener('click', () => closeModal('teamCountChoiceModal'));
   document.getElementById('btnChoiceFillSpectators').addEventListener('click', () => {
-    choiceModal.classList.add('hidden');
-    const atkPlayers = lobby.attackers.filter(p => p !== null);
-    const defPlayers = lobby.defenders.filter(p => p !== null);
-    const activeCount = atkPlayers.length + defPlayers.length;
-    const needed = Math.min(10 - activeCount, lobby.spectators.length);
+    closeModal('teamCountChoiceModal');
+    const activeCount = getActivePlayers().length;
+    const needed = Math.min(TEAM_SLOT_COUNT * 2 - activeCount, lobby.spectators.length);
     fillRandomFromSpectators(needed);
-    const newActive = [...lobby.attackers.filter(p => p !== null), ...lobby.defenders.filter(p => p !== null)];
-    runTeamOptimization(newActive);
+    runTeamOptimization(getActivePlayers());
   });
   document.getElementById('btnChoiceCurrentCount').addEventListener('click', () => {
-    choiceModal.classList.add('hidden');
-    const activePlayers = [...lobby.attackers.filter(p => p !== null), ...lobby.defenders.filter(p => p !== null)];
-    runTeamOptimization(activePlayers);
+    closeModal('teamCountChoiceModal');
+    runTeamOptimization(getActivePlayers());
   });
 
+  // ポップオーバー外クリックで閉じる
   document.addEventListener('click', (e) => {
-    if (activePicker) {
-      const rankPop = document.getElementById('rankPickerPopover');
-      const rolePop = document.getElementById('rolePickerPopover');
-      if (!rankPop.contains(e.target) && !rolePop.contains(e.target) && !e.target.closest('.player-avatar-box') && !e.target.closest('.player-role-badge') && !e.target.closest('.player-role-badge-empty') && !e.target.closest('.rank-preview')) {
-        closeAllPickers();
-      }
+    if (!activePicker) return;
+    const rankPop = document.getElementById('rankPickerPopover');
+    const rolePop = document.getElementById('rolePickerPopover');
+    const isTriggerClick = e.target.closest('.player-avatar-box, .player-role-badge, .player-role-badge-empty, .rank-preview');
+    if (!rankPop.contains(e.target) && !rolePop.contains(e.target) && !isTriggerClick) {
+      closeAllPickers();
     }
   });
 
+  // Escapeキーでポップオーバー・モーダル・インライン入力を閉じる
   document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-      closeAllPickers();
-      document.getElementById('adjustModal').classList.add('hidden');
-      document.getElementById('compareModal').classList.add('hidden');
-      document.getElementById('bulkModal').classList.add('hidden');
-      document.getElementById('exportModal').classList.add('hidden');
-      document.getElementById('teamCountChoiceModal').classList.add('hidden');
-      document.getElementById('confirmModal').classList.add('hidden');
-      if (inlineAddingSlot || inlineAddingSpectator) {
-        inlineAddingSlot = null;
-        inlineAddingSpectator = false;
-        renderLobby();
-      }
+    if (e.key !== 'Escape') return;
+    closeAllPickers();
+    ['adjustModal', 'compareModal', 'bulkModal', 'exportModal', 'teamCountChoiceModal', 'confirmModal'].forEach(closeModal);
+    if (inlineAddingSlot || inlineAddingSpectator) {
+      inlineAddingSlot = null;
+      inlineAddingSpectator = false;
+      renderLobby();
     }
   });
 }
 
+/* ==========================================================================
+   4. データ永続化・共通ヘルパー関数
+   ========================================================================== */
+function cloneData(data) {
+  return JSON.parse(JSON.stringify(data));
+}
+
+function loadLobbyData() {
+  const saved = localStorage.getItem(STORAGE_KEY_LOBBY);
+  if (saved) {
+    try {
+      lobby = JSON.parse(saved);
+      while (lobby.attackers.length < TEAM_SLOT_COUNT) lobby.attackers.push(null);
+      while (lobby.defenders.length < TEAM_SLOT_COUNT) lobby.defenders.push(null);
+      if (!Array.isArray(lobby.spectators)) lobby.spectators = [];
+      [...lobby.attackers, ...lobby.defenders, ...lobby.spectators].forEach(p => {
+        if (p && !RANKS[p.rank]) p.rank = 'unranked';
+      });
+    } catch (e) {
+      lobby = cloneData(SAMPLE_LOBBY);
+    }
+  } else {
+    lobby = cloneData(SAMPLE_LOBBY);
+    saveLobbyData();
+  }
+}
+
+function saveLobbyData() {
+  localStorage.setItem(STORAGE_KEY_LOBBY, JSON.stringify(lobby));
+}
+
+function createPlayer({ name, rank = 'unranked', role = 'none', adjustment = 0, mvpBonus = 0, locked = false }) {
+  return {
+    id: `p_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    name,
+    rank,
+    role,
+    adjustment,
+    mvpBonus,
+    locked
+  };
+}
+
+function getTeamPlayers(teamKey) {
+  return lobby[teamKey].filter(p => p !== null);
+}
+
+function getActivePlayers() {
+  return [...getTeamPlayers('attackers'), ...getTeamPlayers('defenders')];
+}
+
+// アタッカーの空き -> ディフェンダーの空き -> (任意で)観戦者の順に配置する
+function placePlayerInLobby(player, allowSpectator = true) {
+  const atkEmpty = lobby.attackers.findIndex(s => s === null);
+  if (atkEmpty !== -1) {
+    lobby.attackers[atkEmpty] = player;
+    return;
+  }
+  const defEmpty = lobby.defenders.findIndex(s => s === null);
+  if (defEmpty !== -1) {
+    lobby.defenders[defEmpty] = player;
+    return;
+  }
+  if (allowSpectator) {
+    lobby.spectators.push(player);
+  }
+}
+
+function getEffectiveRate(player) {
+  if (!player) return 0;
+  const base = RANKS[player.rank] ? RANKS[player.rank].value : 1000;
+  const adj = Number(player.adjustment) || 0;
+  const mvp = Number(player.mvpBonus) || 0;
+  return base + adj + mvp;
+}
+
+function getRankFromRate(rate) {
+  const rankEntries = Object.entries(RANKS).filter(([k]) => k !== 'unranked');
+  let closest = RANKS.p1;
+  let minDiff = Infinity;
+
+  for (const [, info] of rankEntries) {
+    const diff = Math.abs(rate - info.value);
+    if (diff < minDiff) {
+      minDiff = diff;
+      closest = info;
+    }
+  }
+  return closest;
+}
+
+function shouldShowRoleFit(players) {
+  if (!players || players.length === 0) return false;
+  const roleCounts = {};
+  players.forEach(p => {
+    if (p && p.role && p.role !== 'none') {
+      roleCounts[p.role] = (roleCounts[p.role] || 0) + 1;
+    }
+  });
+  return Object.values(roleCounts).some(c => c >= 2);
+}
+
+function evaluateRoleFit(penalty) {
+  if (penalty <= 2.0) {
+    return { text: '◎', className: 'role-text-excellent' };
+  }
+  if (penalty <= 10.0) {
+    return { text: '〇', className: 'role-text-good' };
+  }
+  return { text: '△', className: 'role-text-fair' };
+}
+
+function openModal(modalId) {
+  const el = document.getElementById(modalId);
+  if (el) el.classList.remove('hidden');
+}
+
+function closeModal(modalId) {
+  const el = document.getElementById(modalId);
+  if (el) el.classList.add('hidden');
+}
+
+function shuffleArray(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+}
+
+function escapeHtml(str) {
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+/* ==========================================================================
+   5. ロビー描画・プレイヤーカード生成・インライン編集
+   ========================================================================== */
 function renderLobby() {
   renderTeamSlots('attackers', 'slotsAttackers', 'countAttackers');
   renderTeamSlots('defenders', 'slotsDefenders', 'countDefenders');
@@ -320,10 +493,10 @@ function renderTeamSlots(teamKey, containerId, countId) {
   container.innerHTML = '';
 
   const team = lobby[teamKey];
-  const activeCount = team.filter(p => p !== null).length;
-  document.getElementById(countId).textContent = `${activeCount} / 5`;
+  const activeCount = getTeamPlayers(teamKey).length;
+  document.getElementById(countId).textContent = `${activeCount} / ${TEAM_SLOT_COUNT}`;
 
-  for (let i = 0; i < 5; i++) {
+  for (let i = 0; i < TEAM_SLOT_COUNT; i++) {
     const player = team[i];
     const slotEl = document.createElement('div');
     slotEl.className = 'lobby-slot';
@@ -367,14 +540,13 @@ function renderSpectators() {
   } else {
     lobby.spectators.forEach((player, idx) => {
       player.locked = false;
-      const cardEl = createPlayerCard(player, 'spectators', idx);
-      container.appendChild(cardEl);
+      container.appendChild(createPlayerCard(player, 'spectators', idx));
     });
   }
 
   if (inlineAddingSpectator) {
     const inlineDiv = document.createElement('div');
-    inlineDiv.style.padding = '6px 10px';
+    inlineDiv.className = 'spectator-inline-wrapper';
     inlineDiv.appendChild(createInlineAddForm('spectators', lobby.spectators.length));
     container.appendChild(inlineDiv);
   }
@@ -384,7 +556,9 @@ function createInlineAddForm(targetTeam, targetIndex) {
   const form = document.createElement('div');
   form.className = 'slot-inline-add';
 
-  let currentRank = (targetTeam === 'spectators') ? inlineSpectatorRank : (inlineAddingSlot ? inlineAddingSlot.rank : 'unranked');
+  let currentRank = (targetTeam === 'spectators')
+    ? inlineSpectatorRank
+    : (inlineAddingSlot ? inlineAddingSlot.rank : 'unranked');
   const rankInfo = RANKS[currentRank] || RANKS.unranked;
 
   form.innerHTML = `
@@ -426,15 +600,7 @@ function createInlineAddForm(targetTeam, targetIndex) {
       return;
     }
 
-    const newPlayer = {
-      id: 'p_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-      name,
-      rank: currentRank,
-      role: 'none',
-      adjustment: 0,
-      mvpBonus: 0,
-      locked: false
-    };
+    const newPlayer = createPlayer({ name, rank: currentRank });
 
     if (targetTeam === 'spectators') {
       lobby.spectators.push(newPlayer);
@@ -544,6 +710,7 @@ function createPlayerCard(player, currentArea, currentIndex) {
     </div>
   `;
 
+  // ランク変更
   const avatarBox = card.querySelector('.player-avatar-box');
   avatarBox.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -555,6 +722,7 @@ function createPlayerCard(player, currentArea, currentIndex) {
     });
   });
 
+  // ロール変更
   const roleBadge = card.querySelector('.player-role-badge, .player-role-badge-empty');
   if (roleBadge) {
     roleBadge.addEventListener('click', (e) => {
@@ -568,12 +736,14 @@ function createPlayerCard(player, currentArea, currentIndex) {
     });
   }
 
+  // 名前編集（ダブルクリック）
   const nameSpan = card.querySelector('.player-name');
   nameSpan.addEventListener('dblclick', (e) => {
     e.stopPropagation();
     startInlineNameEdit(nameSpan, player);
   });
 
+  // チーム固定切り替え
   const lockBtn = card.querySelector('.btn-lock');
   if (lockBtn) {
     lockBtn.addEventListener('click', (e) => {
@@ -586,18 +756,21 @@ function createPlayerCard(player, currentArea, currentIndex) {
     });
   }
 
+  // 実力補正モーダルを開く
   const adjustBtn = card.querySelector('.btn-adjust-player');
   adjustBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     openAdjustModal(player);
   });
 
+  // プレイヤー消去
   const removeBtn = card.querySelector('.btn-remove-player');
   removeBtn.addEventListener('click', (e) => {
     e.stopPropagation();
     removePlayer(currentArea, currentIndex);
   });
 
+  // ドラッグ操作
   card.addEventListener('dragstart', (e) => {
     draggedItemInfo = { fromArea: currentArea, fromIndex: currentIndex, player };
     card.classList.add('dragging');
@@ -651,25 +824,16 @@ function startInlineNameEdit(nameSpan, player) {
   });
 }
 
+/* ==========================================================================
+   6. ポップオーバー・実力補正モーダル・確認ダイアログ・トースト制御
+   ========================================================================== */
 function openRankPicker(targetElement, selectedRankKey, onSelect) {
   closeAllPickers();
   const popover = document.getElementById('rankPickerPopover');
   const grid = document.getElementById('rankPickerGrid');
   grid.innerHTML = '';
 
-  const orderedKeys = [
-    'radiant', 'unranked',
-    'imo3', 'imo2', 'imo1',
-    'a3', 'a2', 'a1',
-    'd3', 'd2', 'd1',
-    'p3', 'p2', 'p1',
-    'g3', 'g2', 'g1',
-    's3', 's2', 's1',
-    'b3', 'b2', 'b1',
-    'i3', 'i2', 'i1'
-  ];
-
-  orderedKeys.forEach((key) => {
+  RANK_PICKER_ORDER.forEach((key) => {
     const info = RANKS[key];
     if (!info) return;
     const isHalfWidth = key === 'radiant' || key === 'unranked';
@@ -703,7 +867,7 @@ function openRolePicker(targetElement, selectedRoleKey, onSelect) {
     item.className = `role-picker-item ${key === selectedRoleKey ? 'active' : ''}`;
     const iconHtml = info.icon ? `<img src="${info.icon}" alt="${info.name}">` : '✖';
     item.innerHTML = `
-      <span class="role-icon-box" style="width:20px;display:inline-flex;align-items:center;justify-content:center;">${iconHtml}</span>
+      <span class="role-icon-box">${iconHtml}</span>
       <span>${info.name}</span>
     `;
     item.addEventListener('click', (e) => {
@@ -722,7 +886,7 @@ function openRolePicker(targetElement, selectedRoleKey, onSelect) {
 function positionPopover(popover, targetElement) {
   const rect = targetElement.getBoundingClientRect();
   const popWidth = 300;
-  let top = rect.bottom + window.scrollY + 6;
+  const top = rect.bottom + window.scrollY + 6;
   let left = rect.left + window.scrollX;
 
   if (left + popWidth > window.innerWidth - 10) {
@@ -749,7 +913,7 @@ function openAdjustModal(player) {
   document.getElementById('inputCustomAdjustment').value = player.adjustment || 0;
 
   updateMvpBtnSelection(tempMvpBonus);
-  document.getElementById('adjustModal').classList.remove('hidden');
+  openModal('adjustModal');
 }
 
 function updateMvpBtnSelection(bonusVal) {
@@ -767,11 +931,74 @@ function saveAdjustModal() {
 
   saveLobbyData();
   renderLobby();
-  document.getElementById('adjustModal').classList.add('hidden');
+  closeModal('adjustModal');
   showToast(`「${currentAdjustingPlayer.name}」の補正を反映しました`);
   currentAdjustingPlayer = null;
 }
 
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.classList.remove('hidden');
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    toast.classList.add('hidden');
+  }, 3000);
+}
+
+function showCustomConfirm(title, message, okText, onOk, isDanger = false) {
+  if (typeof okText === 'function') {
+    isDanger = Boolean(onOk);
+    onOk = okText;
+    okText = 'OK';
+  }
+
+  document.getElementById('confirmModalTitle').textContent = title;
+  document.getElementById('confirmModalMessage').innerHTML = message;
+  const okBtn = document.getElementById('btnConfirmOk');
+  const cancelBtn = document.getElementById('btnConfirmCancel');
+
+  okBtn.textContent = okText;
+  okBtn.className = isDanger ? 'btn btn-danger' : 'btn btn-primary';
+  okBtn.style.color = '#ffffff';
+  cancelBtn.style.display = 'inline-flex';
+
+  const cleanup = () => {
+    closeModal('confirmModal');
+    okBtn.onclick = null;
+    cancelBtn.onclick = null;
+  };
+
+  okBtn.onclick = () => {
+    cleanup();
+    if (onOk) onOk();
+  };
+  cancelBtn.onclick = cleanup;
+
+  openModal('confirmModal');
+}
+
+function showCustomAlert(title, message) {
+  document.getElementById('confirmModalTitle').textContent = title;
+  document.getElementById('confirmModalMessage').innerHTML = message;
+  const okBtn = document.getElementById('btnConfirmOk');
+  const cancelBtn = document.getElementById('btnConfirmCancel');
+
+  okBtn.textContent = 'OK';
+  okBtn.className = 'btn btn-primary';
+  cancelBtn.style.display = 'none';
+
+  okBtn.onclick = () => {
+    closeModal('confirmModal');
+    okBtn.onclick = null;
+  };
+
+  openModal('confirmModal');
+}
+
+/* ==========================================================================
+   7. ドラッグ＆ドロップ・プレイヤー操作・サマリー更新
+   ========================================================================== */
 function setupSlotDropTarget(slotEl, toArea, toIndex) {
   slotEl.addEventListener('dragover', (e) => {
     e.preventDefault();
@@ -789,7 +1016,6 @@ function setupSlotDropTarget(slotEl, toArea, toIndex) {
     if (!draggedItemInfo) return;
     const item = draggedItemInfo;
     draggedItemInfo = null;
-
     handleDropOnSlot(item, toArea, toIndex);
   });
 }
@@ -828,7 +1054,6 @@ function handleDropOnSpectators(from) {
   if (from.fromArea === 'spectators') return;
 
   from.player.locked = false;
-
   lobby[from.fromArea][from.fromIndex] = null;
   lobby.spectators.push(from.player);
 
@@ -849,22 +1074,18 @@ function removePlayer(area, index) {
   showToast(`「${pName}」を消去しました`);
 }
 
-function shouldShowRoleFit(players) {
-  if (!players || players.length === 0) return false;
-  const roleCounts = {};
-  players.forEach(p => {
-    if (p && p.role && p.role !== 'none') {
-      roleCounts[p.role] = (roleCounts[p.role] || 0) + 1;
-    }
-  });
-  const counts = Object.values(roleCounts);
-  if (counts.length === 0) return false;
-  return counts.some(c => c >= 2);
+function swapSides() {
+  const temp = lobby.attackers;
+  lobby.attackers = lobby.defenders;
+  lobby.defenders = temp;
+  saveLobbyData();
+  renderLobby();
+  showToast('アタッカーとディフェンダーのサイドを入れ替えました');
 }
 
 function updateBalanceSummary() {
-  const atkPlayers = lobby.attackers.filter(p => p !== null);
-  const defPlayers = lobby.defenders.filter(p => p !== null);
+  const atkPlayers = getTeamPlayers('attackers');
+  const defPlayers = getTeamPlayers('defenders');
   const activePlayers = [...atkPlayers, ...defPlayers];
 
   const atkEl = document.getElementById('attackerAvgDisplay');
@@ -882,8 +1103,10 @@ function updateBalanceSummary() {
     return;
   }
 
+  const sumAtk = atkPlayers.reduce((sum, p) => sum + getEffectiveRate(p), 0);
+  const sumDef = defPlayers.reduce((sum, p) => sum + getEffectiveRate(p), 0);
+
   if (atkPlayers.length > 0) {
-    const sumAtk = atkPlayers.reduce((sum, p) => sum + getEffectiveRate(p), 0);
     const avgAtkRate = Math.round(sumAtk / atkPlayers.length);
     const avgRankAtk = getRankFromRate(avgAtkRate);
     atkEl.innerHTML = `
@@ -895,7 +1118,6 @@ function updateBalanceSummary() {
   }
 
   if (defPlayers.length > 0) {
-    const sumDef = defPlayers.reduce((sum, p) => sum + getEffectiveRate(p), 0);
     const avgDefRate = Math.round(sumDef / defPlayers.length);
     const avgRankDef = getRankFromRate(avgDefRate);
     defEl.innerHTML = `
@@ -907,23 +1129,13 @@ function updateBalanceSummary() {
   }
 
   if (atkPlayers.length > 0 && defPlayers.length > 0) {
-    const sumAtk = atkPlayers.reduce((sum, p) => sum + getEffectiveRate(p), 0);
-    const sumDef = defPlayers.reduce((sum, p) => sum + getEffectiveRate(p), 0);
     const rateDiff = Math.abs(sumAtk - sumDef);
     diffEl.innerHTML = `レート差: <strong>${rateDiff} pt</strong>`;
 
     if (showRole) {
       roleEl.style.display = 'inline-flex';
       const penalty = calculateRolePenalty(atkPlayers, defPlayers, activePlayers);
-      let roleText = '△';
-      let roleClass = 'role-text-fair';
-      if (penalty <= 2.0) {
-        roleText = '◎';
-        roleClass = 'role-text-excellent';
-      } else if (penalty <= 10.0) {
-        roleText = '〇';
-        roleClass = 'role-text-good';
-      }
+      const { text: roleText, className: roleClass } = evaluateRoleFit(penalty);
       roleEl.innerHTML = `ロール適合度: <strong class="${roleClass}">${roleText}</strong>`;
     } else {
       roleEl.style.display = 'none';
@@ -934,19 +1146,11 @@ function updateBalanceSummary() {
   }
 }
 
-function swapSides() {
-  const temp = lobby.attackers;
-  lobby.attackers = lobby.defenders;
-  lobby.defenders = temp;
-  saveLobbyData();
-  renderLobby();
-  showToast('アタッカーとディフェンダーのサイドを入れ替えました');
-}
-
+/* ==========================================================================
+   8. チーム分け最適化アルゴリズム・パターン比較
+   ========================================================================== */
 function optimizeTeams() {
-  const atkPlayers = lobby.attackers.filter(p => p !== null);
-  const defPlayers = lobby.defenders.filter(p => p !== null);
-  const activePlayers = [...atkPlayers, ...defPlayers];
+  const activePlayers = getActivePlayers();
   const specCount = lobby.spectators.length;
   const totalCount = activePlayers.length + specCount;
 
@@ -955,7 +1159,7 @@ function optimizeTeams() {
     return;
   }
 
-  if (activePlayers.length < 10 && specCount > 0) {
+  if (activePlayers.length < TEAM_SLOT_COUNT * 2 && specCount > 0) {
     showTeamCountChoiceModal(activePlayers.length, specCount);
     return;
   }
@@ -964,7 +1168,6 @@ function optimizeTeams() {
 }
 
 function showTeamCountChoiceModal(activeCount, specCount) {
-  const modal = document.getElementById('teamCountChoiceModal');
   const descEl = document.getElementById('choiceModalDesc');
   const btnFill = document.getElementById('btnChoiceFillSpectators');
   const labelCurrent = document.getElementById('choiceCurrentCountLabel');
@@ -972,15 +1175,15 @@ function showTeamCountChoiceModal(activeCount, specCount) {
   const total = activeCount + specCount;
   labelCurrent.textContent = `${activeCount}人`;
 
-  if (total >= 10) {
+  if (total >= TEAM_SLOT_COUNT * 2) {
     descEl.innerHTML = `現在のアタッカー・ディフェンダーは <strong>${activeCount}人</strong>（観戦者 ${specCount}人）です。<br>観戦者からランダムで選出して10人でチーム分けを行いますか？今の人数のままでチーム分けを行いますか？`;
-    btnFill.innerHTML = `観戦者からランダム選出して10人でチーム分け`;
+    btnFill.innerHTML = `観戦者からランダムで選出して10人でチーム分けをする`;
   } else {
     descEl.innerHTML = `現在のアタッカー・ディフェンダーは <strong>${activeCount}人</strong>（観戦者 ${specCount}人、計 ${total}人）です。<br>観戦者から補充して${total}人でチーム分けを行いますか？今の人数のままでチーム分けを行いますか？`;
     btnFill.innerHTML = `観戦者を加えて${total}人でチーム分け`;
   }
 
-  modal.classList.remove('hidden');
+  openModal('teamCountChoiceModal');
 }
 
 function fillRandomFromSpectators(neededCount) {
@@ -989,13 +1192,7 @@ function fillRandomFromSpectators(neededCount) {
     if (lobby.spectators.length === 0) break;
     const p = lobby.spectators.shift();
     p.locked = false;
-    const atkEmpty = lobby.attackers.findIndex(s => s === null);
-    if (atkEmpty !== -1) {
-      lobby.attackers[atkEmpty] = p;
-    } else {
-      const defEmpty = lobby.defenders.findIndex(s => s === null);
-      if (defEmpty !== -1) lobby.defenders[defEmpty] = p;
-    }
+    placePlayerInLobby(p, false);
   }
   saveLobbyData();
   renderLobby();
@@ -1043,14 +1240,13 @@ function runTeamOptimization(activePlayers) {
 
   getCombinations(0, []);
 
+  // 両チームの人数が同じかつ固定メンバーがいない場合、A/B対称な組み合わせの重複を省く
   let validCombinations = freeCombinations;
   if (lockedAtk.length === 0 && lockedDef.length === 0 && targetA === targetB && freePlayers.length > 0) {
     validCombinations = freeCombinations.filter(combo => combo.includes(0));
   }
 
-  const scoredCandidates = [];
-
-  validCombinations.forEach(combo => {
+  const scoredCandidates = validCombinations.map(combo => {
     const chosenFree = combo.map(i => freePlayers[i]);
     const remainingFree = freePlayers.filter((_, idx) => !combo.includes(idx));
 
@@ -1076,7 +1272,7 @@ function runTeamOptimization(activePlayers) {
       totalScore = rateDiff * 2.0 + rolePenalty * 50.0 + topDiff * 1.0;
     }
 
-    scoredCandidates.push({
+    return {
       attackers,
       defenders,
       sumA,
@@ -1087,11 +1283,12 @@ function runTeamOptimization(activePlayers) {
       topDiff,
       rolePenalty,
       totalScore
-    });
+    };
   });
 
   scoredCandidates.sort((a, b) => a.totalScore - b.totalScore);
 
+  // 同一メンバー構成の重複候補を除外
   const uniqueCandidates = [];
   const seenSignatures = new Set();
   scoredCandidates.forEach(cand => {
@@ -1109,27 +1306,27 @@ function runTeamOptimization(activePlayers) {
     shuffleArray(topPool);
     generatedCandidates = topPool;
   } else {
-    generatedCandidates = uniqueCandidates.slice(0, 16);
+    generatedCandidates = uniqueCandidates.slice(0, MAX_CANDIDATES);
   }
 
-  displayedPatternCount = Math.min(8, generatedCandidates.length);
+  displayedPatternCount = Math.min(MAX_VISIBLE_TABS, generatedCandidates.length);
   currentCandidateIndex = 0;
 
   applyPatternToLobby(generatedCandidates[0]);
   renderPatternTabs();
 
   document.getElementById('patternBar').classList.remove('hidden');
-  showToast('チーム分けの候補を出しました！');
+  showToast('チーム分けの候補を選びました。');
 }
 
 function applyPatternToLobby(cand) {
-  const newAtk = [null, null, null, null, null];
-  const newDef = [null, null, null, null, null];
+  const newAtk = Array(TEAM_SLOT_COUNT).fill(null);
+  const newDef = Array(TEAM_SLOT_COUNT).fill(null);
   cand.attackers.forEach((p, idx) => {
-    if (idx < 5) newAtk[idx] = p;
+    if (idx < TEAM_SLOT_COUNT) newAtk[idx] = p;
   });
   cand.defenders.forEach((p, idx) => {
-    if (idx < 5) newDef[idx] = p;
+    if (idx < TEAM_SLOT_COUNT) newDef[idx] = p;
   });
   lobby.attackers = newAtk;
   lobby.defenders = newDef;
@@ -1162,7 +1359,8 @@ function calculateRolePenalty(teamA, teamB, allSelected) {
   const a = countRoles(teamA);
   const b = countRoles(teamB);
 
-  const totalSmokes = (overallRoles.controller || 0);
+  // コントローラー（モク）の偏りペナルティ
+  const totalSmokes = overallRoles.controller || 0;
   if (totalSmokes >= 2) {
     if (a.controller === 0) penalty += 20.0;
     if (b.controller === 0) penalty += 20.0;
@@ -1175,7 +1373,8 @@ function calculateRolePenalty(teamA, teamB, allSelected) {
     }
   }
 
-  const totalInits = (overallRoles.initiator || 0);
+  // イニシエーターの偏りペナルティ
+  const totalInits = overallRoles.initiator || 0;
   if (totalInits >= 2) {
     if (a.initiator === 0) penalty += 15.0;
     if (b.initiator === 0) penalty += 15.0;
@@ -1188,7 +1387,8 @@ function calculateRolePenalty(teamA, teamB, allSelected) {
     }
   }
 
-  const totalDuelists = (overallRoles.duelist || 0);
+  // デュエリストの偏りペナルティ
+  const totalDuelists = overallRoles.duelist || 0;
   if (totalDuelists > 0) {
     if (a.duelist >= 3) penalty += (a.duelist - 2) * 8.0;
     if (b.duelist >= 3) penalty += (b.duelist - 2) * 8.0;
@@ -1198,7 +1398,8 @@ function calculateRolePenalty(teamA, teamB, allSelected) {
     }
   }
 
-  const totalSents = (overallRoles.sentinel || 0);
+  // センチネルの偏りペナルティ
+  const totalSents = overallRoles.sentinel || 0;
   if (totalSents >= 2) {
     if (a.sentinel === 0) penalty += 5.0;
     if (b.sentinel === 0) penalty += 5.0;
@@ -1210,15 +1411,6 @@ function calculateRolePenalty(teamA, teamB, allSelected) {
 
   return penalty;
 }
-
-function shuffleArray(arr) {
-  for (let i = arr.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]];
-  }
-}
-
-const CIRCLE_NUMS = ['①', '②', '③', '④', '⑤', '⑥', '⑦', '⑧'];
 
 function renderPatternTabs() {
   const container = document.getElementById('patternTabsList');
@@ -1244,10 +1436,22 @@ function renderPatternTabs() {
 }
 
 function updatePatternTabs() {
-  const btns = document.querySelectorAll('.pattern-tab-btn');
-  btns.forEach((btn, idx) => {
+  document.querySelectorAll('.pattern-tab-btn').forEach((btn, idx) => {
     btn.classList.toggle('active', idx === currentCandidateIndex);
   });
+}
+
+function pickRandomTopCandidate() {
+  const poolSize = Math.min(4, generatedCandidates.length);
+  if (poolSize === 0) return;
+
+  const randomIndex = Math.floor(Math.random() * poolSize);
+  currentCandidateIndex = randomIndex;
+  applyPatternToLobby(generatedCandidates[randomIndex]);
+  updatePatternTabs();
+
+  const label = CIRCLE_NUMS[randomIndex] || `${randomIndex + 1}`;
+  showToast(`🎲 候補${label}をランダム選出しました！`);
 }
 
 function renderCompareModal() {
@@ -1255,7 +1459,7 @@ function renderCompareModal() {
   container.innerHTML = '';
 
   if (generatedCandidates.length === 0) {
-    container.innerHTML = '<p style="text-align:center; padding: 20px; color: var(--text-dim);">生成された候補がありません</p>';
+    container.innerHTML = '<p class="compare-empty-msg">生成された候補がありません</p>';
     return;
   }
 
@@ -1264,15 +1468,7 @@ function renderCompareModal() {
     const card = document.createElement('div');
     card.className = `compare-card ${isCurrent ? 'current' : ''}`;
 
-    let roleText = '△';
-    let roleClass = 'role-text-fair';
-    if (cand.rolePenalty <= 2.0) {
-      roleText = '◎';
-      roleClass = 'role-text-excellent';
-    } else if (cand.rolePenalty <= 10.0) {
-      roleText = '〇';
-      roleClass = 'role-text-good';
-    }
+    const { text: roleText, className: roleClass } = evaluateRoleFit(cand.rolePenalty);
     const avgRankA = getRankFromRate(cand.avgA);
     const avgRankB = getRankFromRate(cand.avgB);
     const label = `パターン ${idx + 1}`;
@@ -1285,7 +1481,7 @@ function renderCompareModal() {
         : '';
       const lockHtml = p.locked ? `<span class="mini-lock" title="チーム固定">🔒</span>` : '';
       const mvpHtml = p.mvpBonus === 50
-        ? `<span class="mini-mvp" title="前回大キャリー">🔥</span>`
+        ? `<span class="mini-mvp" title="前回対戦MVP">🔥</span>`
         : (p.mvpBonus === 100 ? `<span class="mini-mvp" title="前回大キャリー">👑</span>` : '');
 
       return `
@@ -1347,7 +1543,7 @@ function renderCompareModal() {
       currentCandidateIndex = idx;
       applyPatternToLobby(cand);
       renderPatternTabs();
-      document.getElementById('compareModal').classList.add('hidden');
+      closeModal('compareModal');
       showToast(`パターン ${idx + 1} をロビーに適用しました`);
     });
 
@@ -1355,9 +1551,12 @@ function renderCompareModal() {
   });
 }
 
+/* ==========================================================================
+   9. Discordコピー・一括登録・データ保存（エクスポート）
+   ========================================================================== */
 function copyDiscordText() {
-  const atk = lobby.attackers.filter(p => p !== null);
-  const def = lobby.defenders.filter(p => p !== null);
+  const atk = getTeamPlayers('attackers');
+  const def = getTeamPlayers('defenders');
 
   if (atk.length === 0 && def.length === 0) {
     showCustomAlert('プレイヤー不在', 'チームにプレイヤーがいません。');
@@ -1365,23 +1564,18 @@ function copyDiscordText() {
   }
 
   const DIVIDER = '━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━';
-  const lines = ['**チームの組み合わせ結果**'];
-
-  lines.push('**【アタッカー:red_circle:】**');
-  lines.push(DIVIDER);
-  atk.forEach(p => {
-    lines.push(`**・ ${p.name} **`);
-  });
-  lines.push(DIVIDER);
-
-  lines.push('');
-
-  lines.push('**【ディフェンダー:blue_circle: 】**');
-  lines.push(DIVIDER);
-  def.forEach(p => {
-    lines.push(`**・ ${p.name} **`);
-  });
-  lines.push(DIVIDER);
+  const lines = [
+    '**チームの組み合わせ結果**',
+    '**【アタッカー:red_circle:】**',
+    DIVIDER,
+    ...atk.map(p => `**・ ${p.name} **`),
+    DIVIDER,
+    '',
+    '**【ディフェンダー:blue_circle: 】**',
+    DIVIDER,
+    ...def.map(p => `**・ ${p.name} **`),
+    DIVIDER
+  ];
 
   const discordText = lines.join('\n');
 
@@ -1392,55 +1586,21 @@ function copyDiscordText() {
   });
 }
 
-const BULK_RANK_PATTERNS = [
-  { key: 'radiant', patterns: [/radiant/i, /レディアント/, /レディ/, /れでぃ/] },
-  { key: 'imo3', patterns: [/imo[\s_-]*3/i, /im(?:mortal)?[\s_-]*3/i, /イモータル[\s_]*3/, /いもーたる[\s_]*3/, /イモ[\s_]*3/, /いも[\s_]*3/] },
-  { key: 'imo2', patterns: [/imo[\s_-]*2/i, /im(?:mortal)?[\s_-]*2/i, /イモータル[\s_]*2/, /いもーたる[\s_]*2/, /イモ[\s_]*2/, /いも[\s_]*2/] },
-  { key: 'imo1', patterns: [/imo[\s_-]*1/i, /im(?:mortal)?[\s_-]*1/i, /イモータル[\s_]*1/, /いもーたる[\s_]*1/, /イモ[\s_]*1/, /いも[\s_]*1/] },
-  { key: 'a3', patterns: [/a(?:sc(?:endant)?)?[\s_-]*3/i, /アセンダント[\s_]*3/, /あせんだんと[\s_]*3/, /アセ[\s_]*3/, /あせ[\s_]*3/] },
-  { key: 'a2', patterns: [/a(?:sc(?:endant)?)?[\s_-]*2/i, /アセンダント[\s_]*2/, /あせんだんと[\s_]*2/, /アセ[\s_]*2/, /あせ[\s_]*2/] },
-  { key: 'a1', patterns: [/a(?:sc(?:endant)?)?[\s_-]*1/i, /アセンダント[\s_]*1/, /あせんだんと[\s_]*1/, /アセ[\s_]*1/, /あせ[\s_]*1/] },
-  { key: 'd3', patterns: [/d(?:ia|iamond)?[\s_-]*3/i, /ダイヤモンド[\s_]*3/, /だいやもんど[\s_]*3/, /ダイヤ[\s_]*3/, /だいや[\s_]*3/] },
-  { key: 'd2', patterns: [/d(?:ia|iamond)?[\s_-]*2/i, /ダイヤモンド[\s_]*2/, /だいやもんど[\s_]*2/, /ダイヤ[\s_]*2/, /だいや[\s_]*2/] },
-  { key: 'd1', patterns: [/d(?:ia|iamond)?[\s_-]*1/i, /ダイヤモンド[\s_]*1/, /だいやもんど[\s_]*1/, /ダイヤ[\s_]*1/, /だいや[\s_]*1/] },
-  { key: 'p3', patterns: [/p(?:lat|latinum)?[\s_-]*3/i, /プラチナ[\s_]*3/, /ぷらちな[\s_]*3/, /プラ[\s_]*3/, /ぷら[\s_]*3/] },
-  { key: 'p2', patterns: [/p(?:lat|latinum)?[\s_-]*2/i, /プラチナ[\s_]*2/, /ぷらちな[\s_]*2/, /プラ[\s_]*2/, /ぷら[\s_]*2/] },
-  { key: 'p1', patterns: [/p(?:lat|latinum)?[\s_-]*1/i, /プラチナ[\s_]*1/, /ぷらちな[\s_]*1/, /プラ[\s_]*1/, /ぷら[\s_]*1/] },
-  { key: 'g3', patterns: [/g(?:old)?[\s_-]*3/i, /ゴールド[\s_]*3/, /ごーるど[\s_]*3/, /ゴル[\s_]*3/, /ごる[\s_]*3/] },
-  { key: 'g2', patterns: [/g(?:old)?[\s_-]*2/i, /ゴールド[\s_]*2/, /ごーるど[\s_]*2/, /ゴル[\s_]*2/, /ごる[\s_]*2/] },
-  { key: 'g1', patterns: [/g(?:old)?[\s_-]*1/i, /ゴールド[\s_]*1/, /ごーるど[\s_]*1/, /ゴル[\s_]*1/, /ごる[\s_]*1/] },
-  { key: 's3', patterns: [/s(?:il|ver)?[\s_-]*3/i, /シルバー[\s_]*3/, /しるばー[\s_]*3/, /シル[\s_]*3/, /しる[\s_]*3/] },
-  { key: 's2', patterns: [/s(?:il|ver)?[\s_-]*2/i, /シルバー[\s_]*2/, /しるばー[\s_]*2/, /シル[\s_]*2/, /しる[\s_]*2/] },
-  { key: 's1', patterns: [/s(?:il|ver)?[\s_-]*1/i, /シルバー[\s_]*1/, /しるばー[\s_]*1/, /シル[\s_]*1/, /しる[\s_]*1/] },
-  { key: 'b3', patterns: [/b(?:ro|ronze)?[\s_-]*3/i, /ブロンズ[\s_]*3/, /ぶろんず[\s_]*3/, /ブロ[\s_]*3/, /ぶろ[\s_]*3/] },
-  { key: 'b2', patterns: [/b(?:ro|ronze)?[\s_-]*2/i, /ブロンズ[\s_]*2/, /ぶろんず[\s_]*2/, /ブロ[\s_]*2/, /ぶろ[\s_]*2/] },
-  { key: 'b1', patterns: [/b(?:ro|ronze)?[\s_-]*1/i, /ブロンズ[\s_]*1/, /ぶろんず[\s_]*1/, /ブロ[\s_]*1/, /ぶろ[\s_]*1/] },
-  { key: 'i3', patterns: [/i(?:ron)?[\s_-]*3/i, /アイアン[\s_]*3/, /あいあん[\s_]*3/] },
-  { key: 'i2', patterns: [/i(?:ron)?[\s_-]*2/i, /アイアン[\s_]*2/, /あいあん[\s_]*2/] },
-  { key: 'i1', patterns: [/i(?:ron)?[\s_-]*1/i, /アイアン[\s_]*1/, /あいあん[\s_]*1/] },
-  { key: 'unranked', patterns: [/unranked/i, /unr/i, /アンランク/, /あんらんく/] }
-];
-
-const BULK_ROLE_PATTERNS = [
-  { key: 'duelist', patterns: [/duelist/i, /デュエリスト/, /デュエ/, /due/, /でゅえ/] },
-  { key: 'initiator', patterns: [/initiator/i, /イニシエーター/, /イニシ/, /ini/, /いにし/] },
-  { key: 'controller', patterns: [/controller/i, /スモーク/, /コントローラー/, /モク/, /もく/, /con/] },
-  { key: 'sentinel', patterns: [/sentinel/i, /センチネル/, /センチ/, /sen/, /せんち/] },
-];
-
 function handleApplyBulk() {
   const text = document.getElementById('bulkTextarea').value;
   const rawLines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
   if (rawLines.length === 0) {
-    document.getElementById('bulkModal').classList.add('hidden');
+    closeModal('bulkModal');
     return;
   }
 
   let count = 0;
   rawLines.forEach(rawLine => {
+    // 全角数字を半角数字に正規化
     let line = rawLine.replace(/[０-９]/g, s => String.fromCharCode(s.charCodeAt(0) - 0xFEE0)).trim();
     if (!line) return;
 
+    // 補正値の抽出（例: +50, -25）
     let adjustment = 0;
     const adjMatch = line.match(/(?:^|\s)([+-]\d+)(?:\s|$)/);
     if (adjMatch) {
@@ -1448,71 +1608,46 @@ function handleApplyBulk() {
       line = line.replace(adjMatch[0], ' ');
     }
 
+    // ランクの抽出
     let rank = 'unranked';
     for (const item of BULK_RANK_PATTERNS) {
-      let matched = false;
-      for (const pat of item.patterns) {
-        if (pat.test(line)) {
-          rank = item.key;
-          line = line.replace(pat, ' ');
-          matched = true;
-          break;
-        }
+      const matchedPat = item.patterns.find(pat => pat.test(line));
+      if (matchedPat) {
+        rank = item.key;
+        line = line.replace(matchedPat, ' ');
+        break;
       }
-      if (matched) break;
     }
 
+    // ロールの抽出
     let role = 'none';
     for (const item of BULK_ROLE_PATTERNS) {
-      let matched = false;
-      for (const pat of item.patterns) {
-        if (pat.test(line)) {
-          role = item.key;
-          line = line.replace(pat, ' ');
-          matched = true;
-          break;
-        }
+      const matchedPat = item.patterns.find(pat => pat.test(line));
+      if (matchedPat) {
+        role = item.key;
+        line = line.replace(matchedPat, ' ');
+        break;
       }
-      if (matched) break;
     }
 
+    // 残りのトークンからプレイヤー名を決定
     const remainingTokens = line.trim().split(/\s+/).filter(t => t.length > 0);
     const name = remainingTokens.length > 0 ? remainingTokens[0] : `Player${count + 1}`;
 
-    const p = {
-      id: 'p_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-      name,
-      rank,
-      role,
-      adjustment,
-      mvpBonus: 0,
-      locked: false
-    };
-
-    const atkEmpty = lobby.attackers.findIndex(s => s === null);
-    if (atkEmpty !== -1) {
-      lobby.attackers[atkEmpty] = p;
-    } else {
-      const defEmpty = lobby.defenders.findIndex(s => s === null);
-      if (defEmpty !== -1) {
-        lobby.defenders[defEmpty] = p;
-      } else {
-        lobby.spectators.push(p);
-      }
-    }
+    const newPlayer = createPlayer({ name, rank, role, adjustment });
+    placePlayerInLobby(newPlayer, true);
     count++;
   });
 
   saveLobbyData();
   renderLobby();
-  document.getElementById('bulkModal').classList.add('hidden');
+  closeModal('bulkModal');
   showToast(`${count}人のメンバーを追加しました`);
 }
 
 function exportData() {
   const allPlayers = [
-    ...lobby.attackers.filter(p => p !== null),
-    ...lobby.defenders.filter(p => p !== null),
+    ...getActivePlayers(),
     ...lobby.spectators
   ];
 
@@ -1530,86 +1665,8 @@ function exportData() {
     return `${p.name} ${rankPart}${rolePart}${adjPart}`;
   });
 
-  const exportText = lines.join('\n');
   const textarea = document.getElementById('exportTextarea');
-  if (textarea) textarea.value = exportText;
+  if (textarea) textarea.value = lines.join('\n');
 
-  const exportModal = document.getElementById('exportModal');
-  if (exportModal) exportModal.classList.remove('hidden');
-}
-
-function showToast(msg) {
-  const toast = document.getElementById('toast');
-  toast.textContent = msg;
-  toast.classList.remove('hidden');
-  setTimeout(() => {
-    toast.classList.add('hidden');
-  }, 3000);
-}
-
-function escapeHtml(str) {
-  return String(str)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#039;');
-}
-
-function showCustomConfirm(title, message, okText, onOk, isDanger = false) {
-  if (typeof okText === 'function') {
-    isDanger = !!onOk;
-    onOk = okText;
-    okText = 'OK';
-  }
-
-  const modal = document.getElementById('confirmModal');
-  document.getElementById('confirmModalTitle').textContent = title;
-  document.getElementById('confirmModalMessage').innerHTML = message;
-  const okBtn = document.getElementById('btnConfirmOk');
-  const cancelBtn = document.getElementById('btnConfirmCancel');
-
-  okBtn.textContent = okText;
-  if (isDanger) {
-    okBtn.className = 'btn btn-danger';
-  } else {
-    okBtn.className = 'btn btn-primary';
-  }
-  okBtn.style.color = '#ffffff';
-  cancelBtn.style.display = 'inline-flex';
-
-  const cleanup = () => {
-    modal.classList.add('hidden');
-    okBtn.onclick = null;
-    cancelBtn.onclick = null;
-  };
-
-  okBtn.onclick = () => {
-    cleanup();
-    if (onOk) onOk();
-  };
-  cancelBtn.onclick = () => {
-    cleanup();
-  };
-
-  modal.classList.remove('hidden');
-}
-
-function showCustomAlert(title, message) {
-  const modal = document.getElementById('confirmModal');
-  document.getElementById('confirmModalTitle').textContent = title;
-  document.getElementById('confirmModalMessage').innerHTML = message;
-  const okBtn = document.getElementById('btnConfirmOk');
-  const cancelBtn = document.getElementById('btnConfirmCancel');
-
-  okBtn.textContent = 'OK';
-  okBtn.className = 'btn btn-primary';
-  cancelBtn.style.display = 'none';
-
-  okBtn.onclick = () => {
-    modal.classList.add('hidden');
-    okBtn.onclick = null;
-  };
-
-  modal.classList.remove('hidden');
+  openModal('exportModal');
 }
